@@ -1,0 +1,104 @@
+---
+title: "Practical Machine Learning - Final Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+*Sara Patrizi, May 21 2020*
+
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+# Data 
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+Full source: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. “Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13)”. Stuttgart, Germany: ACM SIGCHI, 2013.
+
+# Goal
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. Class A corresponds to the specified execution of the exercise, while the other 4 classes (B, C, D and E) correspond to common mistakes.
+
+# Loading and cleaning the data
+```{r, results='hide'}
+set.seed(2020)
+library(caret)
+```
+First, I loaded the training data and I split it into two datasets, one for training and one for validation.
+```{r}
+training <- read.csv('./pml-training.csv', header=TRUE)
+dim(training)
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+train <- training[inTrain, ]
+dim(train)
+valid <- training[-inTrain, ]
+dim(valid)
+```
+Then I removed the columns that contain information that is not related to the performance.
+```{r}
+train <- train[, -c(1:7)]
+dim(train)
+valid <- valid[, -c(1:7)]
+dim(valid)
+```
+I also removed the columns that contain NA values.
+```{r}
+train <- train[, colSums(is.na(train)) == 0 ]
+dim(train)
+valid <- valid[, colSums(is.na(valid)) == 0 ]
+dim(valid)
+```
+Finally, I removed the columns that had near zero variance.
+```{r}
+NZV <- nearZeroVar(train)
+train <- train[, -NZV]
+dim(train)
+NZV <- nearZeroVar(valid)
+valid <- valid[, -NZV]
+dim(valid)
+```
+The final datasets had 53 variables instead of 160.
+
+# Model building
+For this project I compared two of the most popular machine learning algorithms, Stochastic gradient boosting trees (gbm) and Random Forest (rf), to see which one had the best accuracy.
+
+## Stochastic gradient boosting trees
+
+```{r}
+control_gbm <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm  <- train(classe ~ ., data=train, method = "gbm", trControl = control_gbm, verbose = FALSE)
+gbm$finalModel
+print(gbm)
+predict_gbm <- predict(gbm, newdata=valid)
+confusion_gbm <- confusionMatrix(predict_gbm, valid$classe)
+confusion_gbm
+```
+
+## Random Forest
+
+```{r}
+control_rf <- trainControl(method="cv", number=3, verboseIter=FALSE)
+rf <- train(classe ~ ., data=train, method="rf", trControl=control_rf)
+rf$finalModel
+predict_rf <- predict(rf, newdata=valid)
+confusion_rf <- confusionMatrix(predict_rf, valid$classe)
+confusion_rf
+```
+
+The model with the best accuracy was the Random Forest, with an out of sample error of 1-0.9913 = 0.0087. Because of this, I used it to predict the "classe" variable on the test set.
+
+# Prediction on the test set
+Before applying the Random Forest model, I loaded the test dataset and cleaned it up by only keeping the columns that appear also in the train dataset.
+```{r}
+test <- read.csv('./pml-testing.csv', header=TRUE)
+keep <- as.character(colnames(train))
+test <- test[, colnames(test) %in% keep]
+prediction <- predict(rf, test)
+prediction
+```
